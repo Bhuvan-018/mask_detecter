@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import os
 import streamlit as st
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 from tensorflow.keras.models import load_model
@@ -7,12 +8,28 @@ from tensorflow.keras.preprocessing.image import img_to_array
 
 st.set_page_config(page_title="Mask Detection", layout="centered")
 
-MODEL_PATH = "Face-Mask-Detection/mask_detector.h5"
-PROTOTXT_PATH = "Face-Mask-Detection/face_detector/deploy.prototxt"
-WEIGHTS_PATH = "Face-Mask-Detection/face_detector/res10_300x300_ssd_iter_140000.caffemodel"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "assets", "mask_detector.h5")
+PROTOTXT_PATH = os.path.join(BASE_DIR, "assets", "face_detector", "deploy.prototxt")
+WEIGHTS_PATH = os.path.join(
+    BASE_DIR,
+    "assets",
+    "face_detector",
+    "res10_300x300_ssd_iter_140000.caffemodel",
+)
+
+def verify_assets():
+    missing = [p for p in [MODEL_PATH, PROTOTXT_PATH, WEIGHTS_PATH] if not os.path.exists(p)]
+    if missing:
+        st.error("Missing model files. Please redeploy with the assets folder included.")
+        for path in missing:
+            st.write(path)
+        st.stop()
+
 
 @st.cache_resource
 def load_assets():
+    verify_assets()
     model = load_model(MODEL_PATH)
     face_net = cv2.dnn.readNetFromCaffe(PROTOTXT_PATH, WEIGHTS_PATH)
     return model, face_net

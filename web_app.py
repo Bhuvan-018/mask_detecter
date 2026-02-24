@@ -9,13 +9,21 @@ from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 # Initialize Flask app
 app = Flask(__name__)
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "assets", "mask_detector.h5")
+PROTOTXT_PATH = os.path.join(BASE_DIR, "assets", "face_detector", "deploy.prototxt")
+WEIGHTS_PATH = os.path.join(
+    BASE_DIR,
+    "assets",
+    "face_detector",
+    "res10_300x300_ssd_iter_140000.caffemodel",
+)
+
 # Load pre-trained face mask detection model
-model = load_model("Face-Mask-Detection/mask_detector.h5")
+model = load_model(MODEL_PATH)
 
 # Load OpenCV's pre-trained face detector
-face_net = cv2.dnn.readNetFromCaffe(
-    "Face-Mask-Detection/face_detector/deploy.prototxt", "Face-Mask-Detection/face_detector/res10_300x300_ssd_iter_140000.caffemodel"
-)
+face_net = cv2.dnn.readNetFromCaffe(PROTOTXT_PATH, WEIGHTS_PATH)
 
 def detect_and_predict_mask(frame, face_net, model):
     h, w = frame.shape[:2]
