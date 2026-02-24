@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import os
 import streamlit as st
+from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.image import img_to_array
@@ -37,75 +38,72 @@ def load_assets():
 model, face_net = load_assets()
 
 st.title("Face Mask Detection")
-st.write("Use the camera or upload an image.")
+st.write("Live webcam streaming with real-time detection.")
 
-camera_image = st.camera_input("Take a picture")
-uploaded_image = st.file_uploader("Or upload an image", type=["jpg", "jpeg", "png"])
 
-image_bytes = None
-if camera_image is not None:
-    image_bytes = camera_image.getvalue()
-elif uploaded_image is not None:
-    image_bytes = uploaded_image.getvalue()
+class MaskVideoProcessor(VideoProcessorBase):
+    def __init__(self):
+        self.model = model
+        self.face_net = face_net
 
-if image_bytes is None:
-    st.stop()
+    def recv(self, frame):
+        frame_bgr = frame.to_ndarray(format="bgr24")
+        (h, w) = frame_bgr.shape[:2]
 
-image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-if frame is None:
-    st.error("Could not read the image.")
-    st.stop()
+        blob = cv2.dnn.blobFromImage(frame_bgr, 1.0, (300, 300), (104.0, 177.0, 123.0))
+        self.face_net.setInput(blob)
+        detections = self.face_net.forward()
 
-(h, w) = frame.shape[:2]
-blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
-face_net.setInput(blob)
-detections = face_net.forward()
+        faces = []
+        locs = []
 
-faces = []
-locs = []
+        for i in range(detections.shape[2]):
+            confidence = detections[0, 0, i, 2]
+            if confidence > 0.5:
+                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+                (startX, startY, endX, endY) = box.astype("int")
+                startX, startY = max(0, startX), max(0, startY)
+                endX, endY = min(w - 1, endX), min(h - 1, endY)
 
-for i in range(detections.shape[2]):
-    confidence = detections[0, 0, i, 2]
-    if confidence > 0.5:
-        box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-        (startX, startY, endX, endY) = box.astype("int")
-        startX, startY = max(0, startX), max(0, startY)
-        endX, endY = min(w - 1, endX), min(h - 1, endY)
+                face = frame_bgr[startY:endY, startX:endX]
+                if face.size == 0:
+                    continue
+                face = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
+                face = cv2.resize(face, (224, 224))
+                face = img_to_array(face)
+                face = preprocess_input(face)
 
-        face = frame[startY:endY, startX:endX]
-        if face.size == 0:
-            continue
-        face = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
-        face = cv2.resize(face, (224, 224))
-        face = img_to_array(face)
-        face = preprocess_input(face)
+                faces.append(face)
+                locs.append((startX, startY, endX, endY))
 
-        faces.append(face)
-        locs.append((startX, startY, endX, endY))
+        preds = []
+        if len(faces) > 0:
+            faces = np.array(faces, dtype="float32")
+            preds = self.model.predict(faces, batch_size=32)
 
-preds = []
-if len(faces) > 0:
-    faces = np.array(faces, dtype="float32")
-    preds = model.predict(faces, batch_size=32)
+        for (box, pred) in zip(locs, preds):
+            (startX, startY, endX, endY) = box
+            mask, without_mask = pred
+            label = "Mask" if mask > without_mask else "No Mask"
+            color = (0, 255, 0) if label == "Mask" else (0, 0, 255)
+            score = max(mask, without_mask)
 
-for (box, pred) in zip(locs, preds):
-    (startX, startY, endX, endY) = box
-    mask, without_mask = pred
-    label = "Mask" if mask > without_mask else "No Mask"
-    color = (0, 255, 0) if label == "Mask" else (0, 0, 255)
-    score = max(mask, without_mask)
+            cv2.putText(
+                frame_bgr,
+                f"{label}: {score * 100:.2f}%",
+                (startX, startY - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                color,
+                2,
+            )
+            cv2.rectangle(frame_bgr, (startX, startY), (endX, endY), color, 2)
 
-    cv2.putText(
-        frame,
-        f"{label}: {score * 100:.2f}%",
-        (startX, startY - 10),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.45,
-        color,
-        2,
-    )
-    cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
+        return frame.from_ndarray(frame_bgr, format="bgr24")
 
-frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-st.image(frame_rgb, channels="RGB")
+
+webrtc_streamer(
+    key="mask-detect",
+    video_processor_factory=MaskVideoProcessor,
+    media_stream_constraints={"video": True, "audio": False},
+)
