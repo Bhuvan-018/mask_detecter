@@ -7,12 +7,12 @@ from tensorflow.keras.preprocessing.image import img_to_array
 # Initialize Flask app
 app = Flask(__name__)
 
-# Update the paths for the model and face detector
+# Load pre-trained face mask detection model
 model = load_model("Face-Mask-Detection/mask_detector.h5")
 
+# Load OpenCV's pre-trained face detector
 face_net = cv2.dnn.readNetFromCaffe(
-    "Face-Mask-Detection/face_detector/deploy.prototxt",
-    "Face-Mask-Detection/face_detector/res10_300x300_ssd_iter_140000.caffemodel"
+    "Face-Mask-Detection/face_detector/deploy.prototxt", "Face-Mask-Detection/face_detector/res10_300x300_ssd_iter_140000.caffemodel"
 )
 
 def detect_and_predict_mask(frame, face_net, model):
@@ -58,22 +58,17 @@ def generate_frames():
 
         locs, preds = detect_and_predict_mask(frame, face_net, model)
 
-        # Add debug logs to print predictions
+        # Revert debug logs and confidence threshold adjustments
         for (box, pred) in zip(locs, preds):
             (startX, startY, endX, endY) = box
             (mask, withoutMask) = pred
 
-            # Debug log for predictions
-            print(f"Prediction: Mask={mask:.2f}, No Mask={withoutMask:.2f}")
-
             label = "Mask" if mask > withoutMask else "No Mask"
             color = (0, 255, 0) if label == "Mask" else (0, 0, 255)
 
-            # Adjust confidence threshold if needed
-            if max(mask, withoutMask) > 0.5:  # Confidence threshold
-                cv2.putText(frame, label, (startX, startY - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
-                cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
+            cv2.putText(frame, label, (startX, startY - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
+            cv2.rectangle(frame, (startX, startY), (endX, endY), color, 2)
 
         ret, buffer = cv2.imencode('.jpg', frame)
         frame = buffer.tobytes()
@@ -90,4 +85,4 @@ def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5001)
