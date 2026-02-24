@@ -1,0 +1,9 @@
+flask>=2.0
+gunicorn>=21.2
+streamlit>=1.32
+tensorflow-cpu==2.15.*
+imutils==0.5.3
+numpy==1.26.*
+opencv-python==4.10.*
+matplotlib==3.8.*
+scipy==1.11.*

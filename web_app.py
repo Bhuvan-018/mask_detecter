@@ -1,8 +1,10 @@
 from flask import Flask, render_template, Response
 import cv2
 import numpy as np
+import os
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.image import img_to_array
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -38,13 +40,14 @@ def detect_and_predict_mask(frame, face_net, model):
             face = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
             face = cv2.resize(face, (224, 224))
             face = img_to_array(face)
-            face = np.expand_dims(face, axis=0)
+            face = preprocess_input(face)
 
             faces.append(face)
             locs.append((startX, startY, endX, endY))
 
     if len(faces) > 0:
-        preds = model.predict(np.vstack(faces))
+        faces = np.array(faces, dtype="float32")
+        preds = model.predict(faces, batch_size=32)
 
     return locs, preds
 
@@ -85,4 +88,5 @@ def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5001)
+    port = int(os.environ.get("PORT", "5001"))
+    app.run(debug=True, host="0.0.0.0", port=port)
