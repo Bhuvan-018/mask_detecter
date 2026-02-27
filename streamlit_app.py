@@ -38,16 +38,8 @@ def load_assets():
 model, face_net = load_assets()
 
 st.title("Face Mask Detection")
-st.write("Webcam mask detection.")
-st.caption("Use fallback capture for stability, or enable live mode (beta).")
-
-if "live_mode" not in st.session_state:
-    st.session_state.live_mode = False
-
-if not st.session_state.live_mode:
-    if st.button("Enable live stream (beta)"):
-        st.session_state.live_mode = True
-        st.rerun()
+st.write("Live webcam mask detection.")
+st.info("Click START to begin real-time detection.")
 
 
 def annotate_frame(frame_bgr, model_obj, face_net_obj):
@@ -116,23 +108,13 @@ class MaskVideoProcessor(VideoProcessorBase):
         return frame.from_ndarray(frame_bgr, format="bgr24")
 
 
-if st.session_state.live_mode:
-    st.info("Live mode is enabled. If it fails on your network, refresh and use fallback capture.")
-    webrtc_streamer(
-        key="mask_detect_live",
-        video_processor_factory=MaskVideoProcessor,
-        media_stream_constraints={"video": {"width": 640, "height": 480}, "audio": False},
-        rtc_configuration={
-            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}],
-        },
-        desired_playing_state=False,
-        async_processing=True,
-    )
-else:
-    captured = st.camera_input("Fallback: Take photo and run mask detection")
-    if captured is not None:
-        file_bytes = np.asarray(bytearray(captured.read()), dtype=np.uint8)
-        snap = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-        if snap is not None:
-            annotated = annotate_frame(snap, model, face_net)
-            st.image(cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB), channels="RGB")
+webrtc_streamer(
+    key="mask_detect_live",
+    video_processor_factory=MaskVideoProcessor,
+    media_stream_constraints={"video": {"width": 640, "height": 480}, "audio": False},
+    rtc_configuration={
+        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}],
+    },
+    desired_playing_state=False,
+    async_processing=True,
+)
