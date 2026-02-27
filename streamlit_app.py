@@ -38,8 +38,16 @@ def load_assets():
 model, face_net = load_assets()
 
 st.title("Face Mask Detection")
-st.write("Live webcam streaming with real-time detection.")
-st.caption("If live stream does not connect in cloud, use the fallback camera capture below.")
+st.write("Webcam mask detection.")
+st.caption("Use fallback capture for stability, or enable live mode (beta).")
+
+if "live_mode" not in st.session_state:
+    st.session_state.live_mode = False
+
+if not st.session_state.live_mode:
+    if st.button("Enable live stream (beta)"):
+        st.session_state.live_mode = True
+        st.rerun()
 
 
 def annotate_frame(frame_bgr, model_obj, face_net_obj):
@@ -108,19 +116,19 @@ class MaskVideoProcessor(VideoProcessorBase):
         return frame.from_ndarray(frame_bgr, format="bgr24")
 
 
-webrtc_ctx = webrtc_streamer(
-    key="mask-detect",
-    video_processor_factory=MaskVideoProcessor,
-    media_stream_constraints={"video": {"width": 640, "height": 480}, "audio": False},
-    rtc_configuration={
-        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}],
-    },
-    desired_playing_state=False,
-    async_processing=True,
-)
-
-if not webrtc_ctx.state.playing:
-    st.info("Click START for live stream. If live stream fails on your network, use capture fallback below.")
+if st.session_state.live_mode:
+    st.info("Live mode is enabled. If it fails on your network, refresh and use fallback capture.")
+    webrtc_streamer(
+        key="mask_detect_live",
+        video_processor_factory=MaskVideoProcessor,
+        media_stream_constraints={"video": {"width": 640, "height": 480}, "audio": False},
+        rtc_configuration={
+            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}],
+        },
+        desired_playing_state=False,
+        async_processing=True,
+    )
+else:
     captured = st.camera_input("Fallback: Take photo and run mask detection")
     if captured is not None:
         file_bytes = np.asarray(bytearray(captured.read()), dtype=np.uint8)
