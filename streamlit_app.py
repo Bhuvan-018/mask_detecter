@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import os
 import streamlit as st
-from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
+from streamlit_webrtc import VideoProcessorBase, WebRtcMode, webrtc_streamer
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.image import img_to_array
@@ -39,7 +39,20 @@ model, face_net = load_assets()
 
 st.title("Face Mask Detection")
 st.write("Live webcam mask detection.")
-st.info("Click START to begin real-time detection.")
+
+if "run_live" not in st.session_state:
+    st.session_state.run_live = False
+
+start_col, stop_col = st.columns(2)
+with start_col:
+    if st.button("Start Live Detection", use_container_width=True):
+        st.session_state.run_live = True
+with stop_col:
+    if st.button("Stop Live Detection", use_container_width=True):
+        st.session_state.run_live = False
+
+if not st.session_state.run_live:
+    st.info("Press 'Start Live Detection' to begin webcam mask detection.")
 
 
 def annotate_frame(frame_bgr, model_obj, face_net_obj):
@@ -110,11 +123,12 @@ class MaskVideoProcessor(VideoProcessorBase):
 
 webrtc_streamer(
     key="mask_detect_live",
+    mode=WebRtcMode.SENDRECV,
     video_processor_factory=MaskVideoProcessor,
     media_stream_constraints={"video": {"width": 640, "height": 480}, "audio": False},
     rtc_configuration={
         "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}],
     },
-    desired_playing_state=False,
+    desired_playing_state=st.session_state.run_live,
     async_processing=True,
 )
