@@ -64,16 +64,21 @@ def get_rtc_configuration():
     ]
 
     try:
-        if "ICE_SERVERS_JSON" in st.secrets:
-            parsed = json.loads(st.secrets["ICE_SERVERS_JSON"])
+        secrets_obj = st.secrets
+    except FileNotFoundError:
+        return {"iceServers": default_ice_servers}
+
+    try:
+        if "ICE_SERVERS_JSON" in secrets_obj:
+            parsed = json.loads(secrets_obj["ICE_SERVERS_JSON"])
             if isinstance(parsed, list) and len(parsed) > 0:
                 return {"iceServers": parsed}
     except Exception:
         pass
 
-    turn_url = st.secrets.get("TURN_URL") if "TURN_URL" in st.secrets else None
-    turn_username = st.secrets.get("TURN_USERNAME") if "TURN_USERNAME" in st.secrets else None
-    turn_password = st.secrets.get("TURN_PASSWORD") if "TURN_PASSWORD" in st.secrets else None
+    turn_url = secrets_obj.get("TURN_URL") if "TURN_URL" in secrets_obj else None
+    turn_username = secrets_obj.get("TURN_USERNAME") if "TURN_USERNAME" in secrets_obj else None
+    turn_password = secrets_obj.get("TURN_PASSWORD") if "TURN_PASSWORD" in secrets_obj else None
 
     if turn_url and turn_username and turn_password:
         return {
