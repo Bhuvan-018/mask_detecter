@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import os
+import json
 import streamlit as st
 from streamlit_webrtc import VideoProcessorBase, WebRtcMode, webrtc_streamer
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
@@ -47,12 +48,40 @@ start_col, stop_col = st.columns(2)
 with start_col:
     if st.button("Start Live Detection", use_container_width=True):
         st.session_state.run_live = True
+        st.rerun()
 with stop_col:
     if st.button("Stop Live Detection", use_container_width=True):
         st.session_state.run_live = False
+        st.rerun()
 
 if not st.session_state.run_live:
     st.info("Press 'Start Live Detection' to begin webcam mask detection.")
+
+
+def get_rtc_configuration():
+    default_ice_servers = [
+        {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]}
+    ]
+
+    try:
+        if "ICE_SERVERS_JSON" in st.secrets:
+            parsed = json.loads(st.secrets["ICE_SERVERS_JSON"])
+            if isinstance(parsed, list) and len(parsed) > 0:
+                return {"iceServers": parsed}
+    except Exception:
+        pass
+
+    turn_url = st.secrets.get("TURN_URL") if "TURN_URL" in st.secrets else None
+    turn_username = st.secrets.get("TURN_USERNAME") if "TURN_USERNAME" in st.secrets else None
+    turn_password = st.secrets.get("TURN_PASSWORD") if "TURN_PASSWORD" in st.secrets else None
+
+    if turn_url and turn_username and turn_password:
+        return {
+            "iceServers": default_ice_servers
+            + [{"urls": [turn_url], "username": turn_username, "credential": turn_password}]
+        }
+
+    return {"iceServers": default_ice_servers}
 
 
 def annotate_frame(frame_bgr, model_obj, face_net_obj):
@@ -121,14 +150,21 @@ class MaskVideoProcessor(VideoProcessorBase):
         return frame.from_ndarray(frame_bgr, format="bgr24")
 
 
-webrtc_streamer(
-    key="mask_detect_live",
-    mode=WebRtcMode.SENDRECV,
-    video_processor_factory=MaskVideoProcessor,
-    media_stream_constraints={"video": {"width": 640, "height": 480}, "audio": False},
-    rtc_configuration={
-        "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}],
-    },
-    desired_playing_state=st.session_state.run_live,
-    async_processing=True,
-)
+if st.session_state.run_live:
+    rtc_configuration = get_rtc_configuration()
+    has_turn = any(
+        "username" in server and "credential" in server
+        for server in rtc_configuration.get("iceServers", [])
+    )
+    if not has_turn:
+        st.warning("Cloud networks may block STUN-only WebRTC. Add TURN secrets for reliable deployed streaming.")
+
+    webrtc_streamer(
+        key="mask_detect_live",
+        mode=WebRtcMode.SENDRECV,
+        video_processor_factory=MaskVideoProcessor,
+        media_stream_constraints={"video": {"width": 640, "height": 480}, "audio": False},
+        rtc_configuration=rtc_configuration,
+        desired_playing_state=True,
+        async_processing=True,
+    )
