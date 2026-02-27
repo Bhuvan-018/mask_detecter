@@ -106,4 +106,5 @@ webrtc_streamer(
     key="mask-detect",
     video_processor_factory=MaskVideoProcessor,
     media_stream_constraints={"video": True, "audio": False},
+    async_processing=True,
 )
